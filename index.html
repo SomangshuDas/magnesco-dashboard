@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAGNESCO Production Management System Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: url('grid-pattern.png'), linear-gradient(135deg, #1b2735, #090a0f);
+            background-size: cover;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+        .logo {
+            position: absolute;
+            top: 10px;
+            left: 20px;
+            width: 200px;
+            height: auto;
+        }
+        h1 {
+            color: white;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 50px;
+            padding: 20px;
+            max-width: 90%;
+        }
+        .machine {
+            width: 280px;
+            height: 280px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            display: none;
+        }
+        .progress-ring {
+            width: 280px;
+            height: 280px;
+            position: absolute;
+            border-radius: 50%;
+            background: conic-gradient(#ddd 0% 100%);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transform: rotate(270deg);
+        }
+        .inner-circle {
+            width: 200px;
+            height: 200px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            border: 12px solid #ddd;
+            box-shadow: inset 0 3px 10px rgba(0, 0, 0, 0.2);
+            padding: 10px;
+        }
+        .info {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <img src="MAGNESCO.png" alt="Company Logo" class="logo">
+    <h1>MAGNESCO Production Management System Dashboard</h1>
+    <div class="container" id="dashboard"></div>
+
+    <script type="module">
+        const dashboard = document.getElementById("dashboard");
+		const googleSheetsAPI = "https://script.google.com/macros/s/AKfycbx4pQArCBQAE-sn192O18LPSf6r9q8k7N9GWGBdL5CUyKVfQQlJU3cq5ka0jCH-kY9z1A/exec";
+		const fetchStatusAPI = "https://script.google.com/macros/s/AKfycbyEsXAvdaN1Z-lJhGwv2VcMDpwFEqdn1drtzlIBtCLl6vU2PNjpzmwcH9Iy5swVQbSm/exec";
+
+        let currentPage = 0;
+        const machinesPerPage = 8;
+		const totalMachines = 16;  // Adjust based on total machines
+        const totalPages = Math.ceil(16 / machinesPerPage);
+        let machineDivs = [];
+
+        function createMachineDivs() {
+            for (let i = 1; i <= totalMachines; i++) {
+                const machineDiv = document.createElement("div");
+                machineDiv.className = "machine";
+                machineDiv.id = `machine${i}`;
+                machineDiv.innerHTML = getMachineHTML(i);
+                dashboard.appendChild(machineDiv);
+                machineDivs.push(machineDiv);
+                fetchTargetFromGoogleSheets(i);
+            }
+        }
+
+        function displayPage(page) {
+            machineDivs.forEach(div => {
+                div.style.display = 'none';
+            });
+
+            const startMachine = page * machinesPerPage;
+            const endMachine = Math.min((page + 1) * machinesPerPage, totalMachines);
+
+            for (let i = startMachine; i < endMachine; i++) {
+                machineDivs[i].style.display = 'flex';
+				fetchTargetFromGoogleSheets(i + 1);
+                fetchAchievedFromGoogleSheets(i + 1);
+            }
+        }
+
+        function getMachineHTML(machineNum) {
+            return `
+                <div class="progress-ring" id="progress${machineNum}"></div>
+                <div class="inner-circle">
+                    <div class="info">
+                        <strong>M${machineNum}</strong><br>
+                        <span id="operator${machineNum}">-</span><br>
+                        <span id="target${machineNum}">Target: -</span><br>
+                        <span id="manufactured${machineNum}">Achieved: -</span><br>
+                        <span id="missed${machineNum}">Balance: -</span>
+                    </div>
+                </div>
+            `;
+        }
+
+		async function fetchTargetFromGoogleSheets(machineNum) {
+			try {
+				let response = await fetch(`${fetchStatusAPI}?action=fetch&machine=Machine%20${machineNum}`);
+				let data = await response.json();
+
+				if (data.status === "Logout Detected") {
+					resetMachineUI(machineNum);
+					return;
+				}
+	
+				if (data.status === "Login Detected") {
+					document.getElementById(`operator${machineNum}`).textContent = data.operator || "-";
+					document.getElementById(`target${machineNum}`).textContent = `Target: ${data.target || "-"}`;
+					fetchAchievedFromGoogleSheets(machineNum);
+				}
+			} catch (error) {
+				console.error("Error fetching machine status:", error);
+			}
+		}
+		
+		async function fetchAchievedFromGoogleSheets(machineNum) {
+			try {
+				let response = await fetch(`${googleSheetsAPI}?machine=Machine%20${machineNum}`);
+				let data = await response.text();
+
+				const targetElement = document.getElementById(`target${machineNum}`);
+				const targetText = targetElement.textContent;
+				let target = parseInt(targetText.replace("Target: ", ""), 10);
+
+				if (targetText === "Target: -") {
+					document.getElementById(`manufactured${machineNum}`).textContent = "Achieved: -";
+					document.getElementById(`missed${machineNum}`).textContent = "Balance: -";
+					return;
+				}
+
+				let achieved = parseInt(data.trim(), 10);
+				if (isNaN(achieved)) {
+					achieved = 0;
+				}
+				let balance = target - achieved;
+
+				updateProgress(machineNum, achieved);
+				document.getElementById(`manufactured${machineNum}`).textContent = `Achieved: ${achieved}`;
+				document.getElementById(`missed${machineNum}`).textContent = `Balance: ${balance}`;
+			} catch (error) {
+				console.error("Error fetching data:", error);
+			}
+		}
+
+        function resetMachineUI(machineNum) {
+            document.getElementById(`operator${machineNum}`).textContent = "-";
+            document.getElementById(`target${machineNum}`).textContent = "Target: -";
+            document.getElementById(`manufactured${machineNum}`).textContent = "Achieved: -";
+            document.getElementById(`missed${machineNum}`).textContent = "Balance: -";
+            updateProgress(machineNum, 0);
+        }
+
+        function updateProgress(machineNum, achieved) {
+            const progressDiv = document.getElementById(`progress${machineNum}`);
+            const percent = Math.min(achieved, 100);
+            progressDiv.style.background = `conic-gradient(#4CAF50 ${percent}%, #ddd ${percent}% 100%)`;
+        }
+
+        createMachineDivs();
+        displayPage(currentPage);
+
+        setInterval(() => {
+            currentPage = (currentPage + 1) % totalPages;
+            displayPage(currentPage);
+        }, 10000);
+
+        setInterval(() => {
+            const startMachine = currentPage * machinesPerPage + 1;
+            const endMachine = Math.min((currentPage + 1) * machinesPerPage, 16);
+            for (let i = startMachine; i <= endMachine; i++) {
+                fetchAchievedFromGoogleSheets(i);
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
