@@ -83,13 +83,15 @@
     <script type="module">
         const dashboard = document.getElementById("dashboard");
 		const googleSheetsAPI = "https://script.google.com/macros/s/AKfycbyjOXlmmwKv28wWwjZFKN6wUY3ikqnZuM7LWJzekxRvJ2uAF-NEI0vX9GznaI15jirflA/exec";
-		const fetchStatusAPI = "https://script.google.com/macros/s/AKfycbypon-ZSK-WdpGCUjpJdmZdj37J51x5WGDiZsSUwckV7WjGOD8Ca48jfcs-qGPOHBtRhg/exec";
+		const fetchStatusAPI = "https://script.google.com/macros/s/AKfycbxIwHRuIalyBTns8jmyfm2tEUAo47r0z2gwqcMk7-UWb7YgUTNcxJSGajsv4vYyaZn6/exec";
 
         let currentPage = 0;
         const machinesPerPage = 8;
 		const totalMachines = 16;  // Adjust based on total machines
-        const totalPages = Math.ceil(16 / machinesPerPage);
+        const totalPages = Math.ceil(totalMachines / machinesPerPage);
         let machineDivs = [];
+		let lastAchievedValues = new Array(totalMachines + 1).fill(null);
+		let lastUpdatedTimes = new Array(totalMachines + 1).fill("-");
 
         function createMachineDivs() {
             for (let i = 1; i <= totalMachines; i++) {
@@ -127,7 +129,9 @@
                         <span id="operator${machineNum}">-</span><br>
                         <span id="target${machineNum}">Target: -</span><br>
                         <span id="manufactured${machineNum}">Achieved: -</span><br>
-                        <span id="missed${machineNum}">Balance: -</span>
+                        <span id="missed${machineNum}">Balance: -</span><br>
+						<span id="lastUpdated${machineNum}">Last Updated: </span><br>
+						<span id="lastUpdatedTime${machineNum}">-</span>
                     </div>
                 </div>
             `;
@@ -165,6 +169,7 @@
 				if (targetText === "Target: -") {
 					document.getElementById(`manufactured${machineNum}`).textContent = "Achieved: -";
 					document.getElementById(`missed${machineNum}`).textContent = "Balance: -";
+					document.getElementById(`lastUpdatedTime${machineNum}`).textContent = "-";
 					return;
 				}
 
@@ -174,9 +179,17 @@
 				}
 				let balance = target - achieved;
 
-				updateProgress(machineNum, achieved);
 				document.getElementById(`manufactured${machineNum}`).textContent = `Achieved: ${achieved}`;
 				document.getElementById(`missed${machineNum}`).textContent = `Balance: ${balance}`;
+				
+				if (lastAchievedValues[machineNum] === null || achieved > lastAchievedValues[machineNum]) {
+					lastAchievedValues[machineNum] = achieved;
+					const now = new Date();
+					lastUpdatedTimes[machineNum] = formatDate(now);
+				}
+				document.getElementById(`lastUpdatedTime${machineNum}`).textContent = `${lastUpdatedTimes[machineNum]}`;
+				
+				updateProgress(machineNum, achieved);
 			} catch (error) {
 				console.error("Error fetching data:", error);
 			}
@@ -187,7 +200,10 @@
             document.getElementById(`target${machineNum}`).textContent = "Target: -";
             document.getElementById(`manufactured${machineNum}`).textContent = "Achieved: -";
             document.getElementById(`missed${machineNum}`).textContent = "Balance: -";
+			document.getElementById(`lastUpdatedTime${machineNum}`).textContent = "-";
             updateProgress(machineNum, 0);
+			lastAchievedValues[machineNum] = null;
+			lastUpdatedTimes[machineNum] = "-";
         }
 
         function updateProgress(machineNum, achieved) {
@@ -196,6 +212,16 @@
             progressDiv.style.background = `conic-gradient(#4CAF50 ${percent}%, #ddd ${percent}% 100%)`;
         }
 
+		function formatDate(date) {
+			const dd = String(date.getDate()).padStart(2, '0');
+			const mm = String(date.getMonth() + 1).padStart(2, '0');
+			const yy = String(date.getFullYear()).slice(-2);
+			const hh = String(date.getHours()).padStart(2, '0');
+			const min = String(date.getMinutes()).padStart(2, '0');
+			const ss = String(date.getSeconds()).padStart(2, '0');
+			return `${hh}:${min}`;
+		}
+		
         createMachineDivs();
         displayPage(currentPage);
 
