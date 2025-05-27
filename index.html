@@ -88,7 +88,7 @@
             z-index: 1;
             font-size: 18px;
             font-weight: bold;
-            line-height: 1.5;
+            line-height: 1.3;
             text-align: center;
         }
         @media (max-width: 1024px) {
@@ -166,6 +166,7 @@
 					<div class="info">
 						<strong>M${machineNum}</strong><br>
 						<span id="operator${machineNum}">-</span><br>
+						<span id="ortarget${machineNum}">Original Target: -</span><br>
 						<span id="target${machineNum}">Target: -</span><br>
 						<span id="manufactured${machineNum}">Achieved: -</span><br>
 						<span id="missed${machineNum}">Balance: -</span><br>
@@ -186,11 +187,12 @@
                     return;
                 }
 
-                if (data.status === "Login Detected") {
-                    document.getElementById(`operator${machineNum}`).textContent = data.operator || "-";
-                    document.getElementById(`target${machineNum}`).textContent = `Target: ${data.target || "-"}`;
-                    fetchAchievedFromGoogleSheets(machineNum);
-                }
+				if (data.status === "Login Detected") {
+					document.getElementById(`operator${machineNum}`).textContent = data.operator || "-";
+					document.getElementById(`target${machineNum}`).textContent = `Target: ${data.target || "-"}`;
+					fetchOriginalTarget(machineNum);
+					fetchAchievedFromGoogleSheets(machineNum);
+				}
             } catch (error) {
                 console.error("Error fetching machine status:", error);
             }
@@ -232,8 +234,22 @@
             }
         }
 
+		async function fetchOriginalTarget(machineNum) {
+			try {
+				let response = await fetch(`${fetchStatusAPI}?action=display&machine=Machine%20${machineNum}`);
+				let data = await response.text();
+				let lines = data.trim().split('\n');
+				let originalTarget = lines[lines.length - 1];
+				document.getElementById(`ortarget${machineNum}`).textContent = `Original Target: ${originalTarget}`;
+			} catch (error) {
+				console.error("Error fetching original target:", error);
+				document.getElementById(`ortarget${machineNum}`).textContent = "Original Target: -";
+			}
+		}
+
         function resetMachineUI(machineNum) {
             document.getElementById(`operator${machineNum}`).textContent = "-";
+			document.getElementById(`ortarget${machineNum}`).textContent = "Original Target: -";
             document.getElementById(`target${machineNum}`).textContent = "Target: -";
             document.getElementById(`manufactured${machineNum}`).textContent = "Achieved: -";
             document.getElementById(`missed${machineNum}`).textContent = "Balance: -";
