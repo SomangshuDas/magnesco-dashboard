@@ -140,13 +140,11 @@
 
     <script type="module">
         const dashboard = document.getElementById("dashboard");
-        const googleSheetsAPI = "https://script.google.com/macros/s/AKfycbyjOXlmmwKv28wWwjZFKN6wUY3ikqnZuM7LWJzekxRvJ2uAF-NEI0vX9GznaI15jirflA/exec";
-        const fetchStatusAPI = "https://script.google.com/macros/s/AKfycbxIwHRuIalyBTns8jmyfm2tEUAo47r0z2gwqcMk7-UWb7YgUTNcxJSGajsv4vYyaZn6/exec";
+        const googleSheetsAPI = "https://script.google.com/macros/s/AKfycbxUVQXjqjSTv7eF3i84koVgCXo94o7oBuTro7C4Cl88OfjXJUa1WsWuloQt1m1bwB9HRA/exec";
+        const fetchStatusAPI = "https://script.google.com/macros/s/AKfycbxNw3WUjVnEURU70hT2Ml8NELRjx8TKTw4z09u3B1HjfuPwIXWww7jX25rlT6Ue7Gpt/exec";
 
         const totalMachines = 16;
         let machineDivs = [];
-        let lastAchievedValues = new Array(totalMachines + 1).fill(null);
-        let lastUpdatedTimes = new Array(totalMachines + 1).fill("-");
 
         function createMachineDivs() {
             for (let i = 1; i <= totalMachines; i++) {
@@ -156,7 +154,7 @@
                 machineDiv.innerHTML = getMachineHTML(i);
                 dashboard.appendChild(machineDiv);
                 machineDivs.push(machineDiv);
-                fetchTargetFromGoogleSheets(i);
+                fetchTargetFromGoogleSheets();
             }
         }
 
@@ -178,73 +176,80 @@
             `;
         }
 
-        async function fetchTargetFromGoogleSheets(machineNum) {
-            try {
-                let response = await fetch(`${fetchStatusAPI}?action=fetch&machine=Machine%20${machineNum}`);
-                let data = await response.json();
-
-                if (data.status === "Logout Detected") {
-                    resetMachineUI(machineNum);
-                    return;
-                }
-
-				if (data.status === "Login Detected") {
-					document.getElementById(`operator${machineNum}`).textContent = data.operator || "-";
-					document.getElementById(`target${machineNum}`).textContent = `Target: ${data.target || "-"}`;
-					fetchOriginalTarget(machineNum);
-					fetchAchievedFromGoogleSheets(machineNum);
-				}
-            } catch (error) {
-                console.error("Error fetching machine status:", error);
-            }
-        }
-
-        async function fetchAchievedFromGoogleSheets(machineNum) {
-            try {
-                let response = await fetch(`${googleSheetsAPI}?machine=Machine%20${machineNum}`);
-                let data = await response.text();
-
-                const targetElement = document.getElementById(`target${machineNum}`);
-                const targetText = targetElement.textContent;
-                let target = parseInt(targetText.replace("Target: ", ""), 10);
-
-                if (targetText === "Target: -") {
-                    document.getElementById(`manufactured${machineNum}`).textContent = "Achieved: -";
-                    document.getElementById(`missed${machineNum}`).textContent = "Balance: -";
-                    document.getElementById(`lastUpdatedTime${machineNum}`).textContent = "-";
-                    return;
-                }
-
-                let achieved = parseInt(data.trim(), 10);
-                if (isNaN(achieved)) achieved = 0;
-                let balance = target - achieved;
-
-                document.getElementById(`manufactured${machineNum}`).textContent = `Achieved: ${achieved}`;
-                document.getElementById(`missed${machineNum}`).textContent = `Balance: ${balance}`;
-
-                if (lastAchievedValues[machineNum] === null || achieved > lastAchievedValues[machineNum]) {
-                    lastAchievedValues[machineNum] = achieved;
-                    const now = new Date();
-                    lastUpdatedTimes[machineNum] = formatDate(now);
-                }
-
-                document.getElementById(`lastUpdatedTime${machineNum}`).textContent = `${lastUpdatedTimes[machineNum]}`;
-                updateProgress(machineNum, achieved);
-            } catch (error) {
-                console.error("Error fetching data:", error);
-            }
-        }
-
-		async function fetchOriginalTarget(machineNum) {
+		async function fetchTargetFromGoogleSheets() {
 			try {
-				let response = await fetch(`${fetchStatusAPI}?action=display&machine=Machine%20${machineNum}`);
-				let data = await response.text();
-				let lines = data.trim().split('\n');
-				let originalTarget = lines[lines.length - 1];
-				document.getElementById(`ortarget${machineNum}`).textContent = `Original Target: ${originalTarget}`;
+				let response = await fetch(`${fetchStatusAPI}?action=fetch`);
+				let text = await response.text();
+				let blocks = text.trim().split(/\n(?=Machine \d+:)/);
+
+				blocks.forEach(block => {
+					let lines = block.trim().split('\n');
+					let header = lines[0];
+					let jsonStr = lines.slice(1).join('\n').trim();
+
+					let match = header.match(/Machine\s*(\d+):/);
+					if (!match) return;
+					let machineNum = parseInt(match[1]);
+
+					let data;
+					try {
+						data = JSON.parse(jsonStr);
+					} catch {
+						data = null;
+					}
+
+					if (!data || data.status === "Logout Detected") {
+						resetMachineUI(machineNum);
+						return;
+					}
+
+					if (data.status === "Login Detected") {
+						document.getElementById(`operator${machineNum}`).textContent = data.operator || "-";
+						document.getElementById(`target${machineNum}`).textContent = `Target: ${data.target ?? "-"}`;
+						document.getElementById(`ortarget${machineNum}`).textContent = `Original Target: ${data.original_target ?? "-"}`;
+					}
+				});
 			} catch (error) {
-				console.error("Error fetching original target:", error);
-				document.getElementById(`ortarget${machineNum}`).textContent = "Original Target: -";
+				console.error("Error fetching machine targets:", error);
+			}
+		}
+
+		async function fetchAchievedFromGoogleSheets() {
+			try {
+				let response = await fetch(googleSheetsAPI);
+				let text = await response.text();
+				let blocks = text.trim().split(/\n(?=Machine \d+:)/);
+
+				blocks.forEach(block => {
+					let lines = block.trim().split('\n');
+					let header = lines[0];
+					let achievedLine = lines[1] || "-";
+					let timeLine = lines[2] || "-";
+
+					let match = header.match(/Machine\s*(\d+):/);
+					if (!match) return;
+					let machineNum = parseInt(match[1]);
+
+					const targetText = document.getElementById(`target${machineNum}`).textContent;
+					if (targetText === "Target: -") {
+						document.getElementById(`manufactured${machineNum}`).textContent = "Achieved: -";
+						document.getElementById(`missed${machineNum}`).textContent = "Balance: -";
+						document.getElementById(`lastUpdatedTime${machineNum}`).textContent = "-";
+						return;
+					}
+
+					let target = parseInt(targetText.replace("Target: ", ""), 10);
+					let achieved = parseInt(achievedLine.trim(), 10);
+					if (isNaN(achieved)) achieved = 0;
+					let balance = target - achieved;
+
+					document.getElementById(`manufactured${machineNum}`).textContent = `Achieved: ${achieved}`;
+					document.getElementById(`missed${machineNum}`).textContent = `Balance: ${balance}`;
+					document.getElementById(`lastUpdatedTime${machineNum}`).textContent = timeLine;
+					updateProgress(machineNum, achieved);
+				});
+			} catch (error) {
+				console.error("Error fetching achieved data:", error);
 			}
 		}
 
@@ -256,8 +261,6 @@
             document.getElementById(`missed${machineNum}`).textContent = "Balance: -";
             document.getElementById(`lastUpdatedTime${machineNum}`).textContent = "-";
             updateProgress(machineNum, 0);
-            lastAchievedValues[machineNum] = null;
-            lastUpdatedTimes[machineNum] = "-";
         }
 
         function updateProgress(machineNum, achieved) {
@@ -269,22 +272,11 @@
             progressDiv.style.width = `${percent}%`;
         }
 
-        function formatDate(date) {
-            const dd = String(date.getDate()).padStart(2, '0');
-            const mm = String(date.getMonth() + 1).padStart(2, '0');
-            const yy = String(date.getFullYear()).slice(-2);
-            const hh = String(date.getHours()).padStart(2, '0');
-            const min = String(date.getMinutes()).padStart(2, '0');
-            const ss = String(date.getSeconds()).padStart(2, '0');
-            return `${hh}:${min}`;
-        }
-
         createMachineDivs();
 
 		setInterval(() => {
-			for (let i = 1; i <= totalMachines; i++) {
-				fetchTargetFromGoogleSheets(i);
-			}
+			fetchTargetFromGoogleSheets();
+			fetchAchievedFromGoogleSheets();
 		}, 1000);
     </script>
 </body>
