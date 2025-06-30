@@ -140,8 +140,8 @@
 
     <script type="module">
         const dashboard = document.getElementById("dashboard");
-        const googleSheetsAPI = "https://script.google.com/macros/s/AKfycbxUVQXjqjSTv7eF3i84koVgCXo94o7oBuTro7C4Cl88OfjXJUa1WsWuloQt1m1bwB9HRA/exec";
-        const fetchStatusAPI = "https://script.google.com/macros/s/AKfycbxNw3WUjVnEURU70hT2Ml8NELRjx8TKTw4z09u3B1HjfuPwIXWww7jX25rlT6Ue7Gpt/exec";
+        const googleSheetsAPI = "https://script.google.com/macros/s/AKfycbxUVQXjqjSTv7eF3i84koVgCXo94o7oBuTro7C4Cl88OfjXJUa1WsWuloQt1m1bwB9HRA/exec"; // Change according to your Google Apps Script "MAGNESCO Production Management System Dashboard" Web App URL
+        const fetchStatusAPI = "https://script.google.com/macros/s/AKfycbxNw3WUjVnEURU70hT2Ml8NELRjx8TKTw4z09u3B1HjfuPwIXWww7jX25rlT6Ue7Gpt/exec"; // Change according to your Google Apps Script "MAGNESCO Production Management System" Web App URL
 
         const totalMachines = 16;
         let machineDivs = [];
@@ -154,8 +154,8 @@
                 machineDiv.innerHTML = getMachineHTML(i);
                 dashboard.appendChild(machineDiv);
                 machineDivs.push(machineDiv);
-                fetchTargetFromGoogleSheets();
             }
+			fetchTargetFromGoogleSheets();
         }
 
         function getMachineHTML(machineNum) {
